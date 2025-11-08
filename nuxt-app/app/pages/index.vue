@@ -256,7 +256,7 @@ const handleDownload = () => {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${companyCode.value}_${year.value}_${month.value}_converted.txt`;
+  a.download = `${companyCode.value}_${year.value}_${month.value}_converted.csv`;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -328,12 +328,11 @@ const convertJaccs = async (
     month: Ref<string>
   ): JaccsRecord => {
     const h0 = header[0] ?? "";
-    const h1 = header[1] ?? "";
 
     const headerData: JaccsHeader = {
       registeredNumber: getRegisteredNumber(h0),
       // if year/month provided by UI, use that; else use header date
-      date: year.value ? `${year.value}${month.value}` : convertDate(h1),
+      date: `${year.value}${month.value}` || "",
     };
 
     const row0 = row[0] ?? "";
@@ -381,10 +380,10 @@ const convertJaccs = async (
       r.data.isNewUser,
       r.data.contractNumber,
     ];
-    return arr.map((v) => `${v}`).join(",");
+    return arr.map((v) => `"${v}"`).join(",");
   });
 
-  const csv = csvRows.join("\r\n");
+  const csv = csvRows.join("\r\n") + "\r\n";
   return csv;
 };
 
@@ -476,10 +475,6 @@ const validateJaccs = async (
         `Line ${lineNo}: Column that contains fee and contract number is missing (index=${idx}).`
       );
     } else {
-      // convertJaccs does:
-      //  fee: slice(0,10)
-      //  isNewUser: [10]
-      //  contractNumber: slice(-15,-1)
       if (feeSource.length < 11) {
         warnings.push(
           `Line ${lineNo}: Fee column may be too short (includes new-user flag position).`
