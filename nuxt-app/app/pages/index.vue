@@ -519,6 +519,7 @@ const convertUMed = async (file: File): Promise<string> => {
     const r = row.data;
     const arr = [
       r.patientNumber,
+      "",
       r.accountHolderName,
       r.bankCode,
       r.bankName,
