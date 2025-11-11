@@ -306,8 +306,8 @@ const convertJaccs = async (
   // helpers
 
   const getRegisteredNumber = (x: string) => x.slice(4, 10);
-  const getBankCode = (x: string) => x.slice(1);
-  const getStoreCode = (x: string) => x;
+  const getBankCode = (x: string) => x.slice(1, 5);
+  const getStoreCode = (x: string) => x.slice(0, 3);
 
   // make this ALWAYS return 3 strings
   const getBankDetail = (a: string, b: string): [string, string, string] => {
