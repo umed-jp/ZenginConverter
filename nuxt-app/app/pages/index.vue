@@ -40,14 +40,28 @@
               </div>
             </div>
 
-            <!-- Year Input -->
+            <!-- Output Format Selection -->
             <div class="space-y-2">
+              <Label for="outputFormat">Output Format</Label>
+              <Select v-model="outputFormat">
+                <SelectTrigger id="outputFormat">
+                  <SelectValue placeholder="Select format" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="JACCS">JACCS</SelectItem>
+                  <SelectItem value="UMed">UMed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <!-- Year Input -->
+            <div class="space-y-2" v-if="outputFormat === 'JACCS'">
               <Label for="year">Year</Label>
               <Input id="year" type="text" placeholder="2025" v-model="year" />
             </div>
 
             <!-- Month Input -->
-            <div class="space-y-2">
+            <div class="space-y-2" v-if="outputFormat === 'JACCS'">
               <Label for="month">Month</Label>
               <Select v-model="month">
                 <SelectTrigger id="month">
@@ -71,7 +85,7 @@
             </div>
 
             <!-- Company Code Input -->
-            <div class="space-y-2">
+            <div class="space-y-2" v-if="outputFormat === 'JACCS'">
               <Label for="companyCode">Company Code</Label>
               <Input
                 id="companyCode"
@@ -79,19 +93,6 @@
                 placeholder="ABC123"
                 v-model="companyCode"
               />
-            </div>
-
-            <!-- Output Format Selection -->
-            <div class="space-y-2">
-              <Label for="outputFormat">Output Format</Label>
-              <Select v-model="outputFormat">
-                <SelectTrigger id="outputFormat">
-                  <SelectValue placeholder="Select format" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="JACCS">JACCS</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
 
             <Button class="w-full" @click="handleConvert">
@@ -118,6 +119,15 @@
               <Button class="w-full" @click="handleDownload">
                 <Download class="mr-2 h-4 w-4" />
                 Download Converted File
+              </Button>
+              <Button
+                variant="outline"
+                class="w-full"
+                v-if="outputFormat === 'UMed'"
+                @click="handleCopyCsv"
+              >
+                <Copy class="mr-2 h-4 w-4" />
+                Copy CSV
               </Button>
             </template>
             <template v-else>
@@ -160,14 +170,14 @@ import {
 } from "@/components/ui/select";
 import { toast } from "vue-sonner";
 import Encoding from "encoding-japanese";
-import { Upload, Download, FileText } from "lucide-vue-next";
+import { Upload, Download, FileText, Copy } from "lucide-vue-next";
 
 const COMPANY_CODE_KEY = "file-converter:companyCode";
 const file = ref<File | null>(null);
 const year = ref("2025");
 const month = ref("");
 const companyCode = ref("");
-const outputFormat = ref("JACCS");
+const outputFormat = ref("UMed");
 const convertedContent = ref<string | null>(null);
 
 onMounted(() => {
@@ -175,6 +185,10 @@ onMounted(() => {
   if (saved) {
     companyCode.value = saved;
   }
+});
+
+watch(outputFormat, () => {
+  convertedContent.value = null;
 });
 
 watch(companyCode, (val) => {
@@ -207,25 +221,41 @@ const handleFileChange = (e: Event) => {
 };
 
 const handleConvert = async () => {
-  if (!file.value || !year.value || !month.value || !companyCode.value) {
-    toast("Missing information", {
-      description: "Please fill in all fields and upload a file",
+  if (!file.value) {
+    toast("No file uploaded", {
+      description: "Please upload a file before converting",
     });
     return;
   }
+  if (outputFormat.value === "JACCS")
+    if (!year.value || !month.value || !companyCode.value) {
+      toast("Missing information", {
+        description: "Please fill in all fields and upload a file",
+      });
+      return;
+    }
 
-  const result = await validateJaccs(file.value, month, year);
-  if (!result.ok) {
-    toast("File format is wrong");
-    console.error("Validation errors:", result.errors);
-    return;
+  if (outputFormat.value === "JACCS") {
+    const result = await validateJaccs(file.value, month, year);
+    if (!result.ok) {
+      toast("File format is wrong");
+      console.error("Validation errors:", result.errors);
+      return;
+    }
   }
 
   try {
     if (outputFormat.value === "JACCS") {
       const converted = await convertJaccs(file.value, month, year);
       convertedContent.value = converted;
-      toast("Conversion complete", {
+      toast("Conversion complete for JACCS", {
+        description: "File has been converted successfully",
+      });
+    }
+    if (outputFormat.value === "UMed") {
+      const converted = await convertUMed(file.value);
+      convertedContent.value = converted;
+      toast("Conversion complete for UMed", {
         description: "File has been converted successfully",
       });
     }
@@ -237,7 +267,7 @@ const handleConvert = async () => {
   }
 };
 
-const handleDownload = () => {
+const handleDownloadShiftJIS = () => {
   if (!convertedContent.value) return;
 
   // JS string (UTF-16) -> Shift_JIS byte array
@@ -262,10 +292,38 @@ const handleDownload = () => {
   a.remove();
   URL.revokeObjectURL(url);
 
-  toast({
-    title: "Download started",
+  toast("Download started", {
     description: "Your converted file is being downloaded as Shift_JIS",
   });
+};
+
+const handleDownloadUTF8 = () => {
+  if (!convertedContent.value) return;
+
+  const blob = new Blob([convertedContent.value], {
+    type: "text/plain;charset=utf-8",
+  });
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${year.value}_${month.value}_converted.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+
+  toast("Download started", {
+    description: "Your converted file is being downloaded as UTF-8",
+  });
+};
+
+const handleDownload = () => {
+  if (outputFormat.value === "JACCS") {
+    handleDownloadShiftJIS();
+  } else {
+    handleDownloadUTF8();
+  }
 };
 
 interface JaccsHeader {
@@ -381,6 +439,95 @@ const convertJaccs = async (
       r.data.contractNumber,
     ];
     return arr.map((v) => `"${v}"`).join(",");
+  });
+
+  const csv = csvRows.join("\r\n") + "\r\n";
+  return csv;
+};
+
+interface UMedRow {
+  patientNumber: string;
+  accountHolderName: string;
+  bankCode: string;
+  bankName: string;
+  branchCode: string;
+  branchName: string;
+  accountType: string;
+  accountNumber: string;
+}
+
+interface UMedRecord {
+  data: UMedRow;
+}
+
+const convertUMed = async (file: File): Promise<string> => {
+  // 1. read file
+  const buf = await file.arrayBuffer();
+  const text = new TextDecoder("shift_jis").decode(buf);
+
+  // 2. parse lines
+  const lines = text.split(/\r?\n/).filter(Boolean);
+  const headerLine = lines[0] ?? "";
+  const header = headerLine.split(/\s+/);
+  // like Python: use 1..-2 as body
+  const body = lines.slice(1, lines.length - 2).map((l) => l.split(/\s+/));
+
+  const getBankDetail = (a: string, b: string): [string, string, string] => {
+    const col1 = a?.[0] ?? "";
+    const col2 = a?.slice(1, 8) ?? "";
+    const col3 = (a?.slice(8) ?? "") + (b ?? "");
+    return [col1, col2, col3];
+  };
+
+  const createFormattedData = (row: string[]): UMedRecord => {
+    const row0 = row[0] ?? "";
+    const row1 = row[1] ?? "";
+    const row2 = row[2] ?? "";
+    const row3 = row[3] ?? "";
+    const row4 = row[4] ?? "";
+
+    const isNumeric = /^\d+$/.test(row[3] ?? "");
+    const detail = isNumeric
+      ? getBankDetail(row2, "")
+      : getBankDetail(row2, row3);
+
+    const rowData: UMedRow = {
+      patientNumber: isNumeric
+        ? getPatientNumber(row3)
+        : getPatientNumber(row4),
+      accountHolderName: detail[2],
+      bankCode: getBankCode(row0),
+      bankName: getBankName(row0),
+      branchCode: getBranchCode(row1),
+      branchName: getBranchName(row1),
+      accountType: detail[0],
+      accountNumber: detail[1],
+    };
+
+    return { data: rowData };
+  };
+
+  const getPatientNumber = (x: string) => x.slice(-8, -1);
+  const getBankCode = (x: string) => x.slice(1, 5);
+  const getBankName = (x: string) => x.slice(5);
+  const getBranchCode = (x: string) => x.slice(0, 3);
+  const getBranchName = (x: string) => x.slice(3);
+
+  const records: UMedRecord[] = body.map((row) => createFormattedData(row));
+
+  const csvRows = records.map((row) => {
+    const r = row.data;
+    const arr = [
+      r.patientNumber,
+      r.accountHolderName,
+      r.bankCode,
+      r.bankName,
+      r.branchCode,
+      r.branchName,
+      r.accountType,
+      r.accountNumber,
+    ];
+    return arr.map((v) => `${v}`).join(",");
   });
 
   const csv = csvRows.join("\r\n") + "\r\n";
@@ -504,5 +651,49 @@ const validateJaccs = async (
     headerLine,
     rowCount: body.length,
   };
+};
+
+const csvToTsv = (csv: string): string => {
+  const lines = csv.split(/\r?\n/).filter((l) => l.length > 0);
+  const out: string[] = [];
+
+  for (const line of lines) {
+    const cells: string[] = [];
+    let cur = "";
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        // toggle or escape
+        if (inQuotes && line[i + 1] === '"') {
+          cur += '"';
+          i++; // skip escaped quote
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (ch === "," && !inQuotes) {
+        cells.push(cur);
+        cur = "";
+      } else {
+        cur += ch;
+      }
+    }
+    cells.push(cur);
+    out.push(cells.join("\t"));
+  }
+
+  return out.join("\r\n");
+};
+
+const handleCopyCsv = async () => {
+  if (!convertedContent.value) return;
+  try {
+    const tsv = csvToTsv(convertedContent.value);
+    await navigator.clipboard.writeText(tsv);
+    toast("CSV copied to clipboard");
+  } catch (e) {
+    console.error("Failed to copy CSV", e);
+  }
 };
 </script>
